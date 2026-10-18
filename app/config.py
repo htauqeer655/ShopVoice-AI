@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-4.1-mini"
     openai_timeout_seconds: float = 20.0
-
+    openai_max_retries: int = 1    
     business_name: str = "DemoShop India"
     max_question_chars: int = 1000
 

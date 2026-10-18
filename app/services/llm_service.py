@@ -24,6 +24,14 @@ class LLMError(Exception):
         self.user_message = user_message
 
 
+def _make_client() -> OpenAI:
+    return OpenAI(
+        api_key=settings.openai_api_key.get_secret_value(),
+        timeout=settings.openai_timeout_seconds,
+        max_retries=settings.openai_max_retries,
+    )
+
+
 def ask(question: str) -> str:
     question = (question or "").strip()
     if not question:
@@ -36,10 +44,7 @@ def ask(question: str) -> str:
     if settings.openai_api_key is None:
         raise LLMError("not_configured", "The assistant is not configured yet.")
 
-    client = OpenAI(
-        api_key=settings.openai_api_key.get_secret_value(),
-        timeout=settings.openai_timeout_seconds,
-    )
+    client = _make_client()
 
     try:
         response = client.chat.completions.create(
@@ -65,8 +70,14 @@ def ask(question: str) -> str:
     except APIStatusError as error:
         logger.error("OpenAI returned status %s", error.status_code)
         raise LLMError("api_error", "The assistant is temporarily unavailable.") from None
+    except Exception as error:
+        # Log only the error type, never its message (it could contain private data).
+        logger.error("Unexpected error calling OpenAI: %s", type(error).__name__)
+        raise LLMError("unexpected", "The assistant is temporarily unavailable.") from None
 
-    answer = (response.choices[0].message.content or "").strip()
+    answer = ""
+    if response.choices:
+        answer = (response.choices[0].message.content or "").strip()
     if not answer:
         raise LLMError("empty_response", "The assistant had no answer. Please try again.")
     return answer
