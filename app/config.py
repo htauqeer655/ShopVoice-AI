@@ -9,9 +9,12 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     # Optional at startup so /health still works without a key.
-    # We check it when the AI feature is actually used.
     openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-4.1-mini"
     openai_timeout_seconds: float = 20.0
+
+    business_name: str = "DemoShop India"
+    max_question_chars: int = 1000
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
