@@ -5,7 +5,8 @@ from fastapi import APIRouter, Response
 from fastapi.responses import JSONResponse
 
 from app.schemas import ChatRequest, ChatResponse
-from app.services.llm_service import LLMError, ask
+from app.services.llm_service import LLMError
+from app.services.rag_service import answer_question
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -13,6 +14,8 @@ router = APIRouter()
 STATUS_BY_KIND = {
     "invalid_input": 400,
     "not_configured": 503,
+    "not_indexed": 503,
+    "search_failed": 503,
     "auth": 503,
     "rate_limit": 503,
     "timeout": 504,
@@ -27,7 +30,7 @@ STATUS_BY_KIND = {
 def chat(body: ChatRequest, response: Response):
     request_id = uuid.uuid4().hex
     try:
-        answer = ask(body.question)
+        result = answer_question(body.question)
     except LLMError as error:
         # Log the failure type and request ID only, never the question.
         logger.warning("chat failed kind=%s request_id=%s", error.kind, request_id)
@@ -37,4 +40,9 @@ def chat(body: ChatRequest, response: Response):
             headers={"X-Request-ID": request_id},
         )
     response.headers["X-Request-ID"] = request_id
-    return ChatResponse(answer=answer, request_id=request_id)
+    return ChatResponse(
+        answer=result.answer,
+        sources=result.sources,
+        grounded=result.grounded,
+        request_id=request_id,
+    )

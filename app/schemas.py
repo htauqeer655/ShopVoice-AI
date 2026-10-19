@@ -9,4 +9,6 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+    sources: list[str]
+    grounded: bool
     request_id: str

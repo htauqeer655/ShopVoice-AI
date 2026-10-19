@@ -5,6 +5,7 @@ from app.api import chat as chat_module
 from app.config import settings
 from app.main import app
 from app.services.llm_service import LLMError
+from app.services.rag_service import RagAnswer
 
 client = TestClient(app)
 
@@ -12,16 +13,18 @@ client = TestClient(app)
 def test_chat_success(monkeypatch):
     seen = {}
 
-    def fake_ask(question):
+    def fake_answer(question):
         seen["question"] = question
-        return "Hello!"
+        return RagAnswer(answer="Hello!", sources=["shipping_policy.md"], grounded=True)
 
-    monkeypatch.setattr(chat_module, "ask", fake_ask)
+    monkeypatch.setattr(chat_module, "answer_question", fake_answer)
     response = client.post("/chat", json={"question": "Hi there"})
 
     assert response.status_code == 200
     body = response.json()
     assert body["answer"] == "Hello!"
+    assert body["sources"] == ["shipping_policy.md"]
+    assert body["grounded"] is True
     assert body["request_id"]
     assert response.headers["X-Request-ID"] == body["request_id"]
     assert seen["question"] == "Hi there"
@@ -49,6 +52,8 @@ def test_whitespace_only_question_is_rejected():
     [
         ("invalid_input", 400),
         ("not_configured", 503),
+        ("not_indexed", 503),
+        ("search_failed", 503),
         ("auth", 503),
         ("rate_limit", 503),
         ("timeout", 504),
@@ -58,11 +63,11 @@ def test_whitespace_only_question_is_rejected():
         ("unexpected", 500),
     ],
 )
-def test_llm_errors_become_safe_http_errors(monkeypatch, kind, status):
-    def failing_ask(question):
+def test_errors_become_safe_http_errors(monkeypatch, kind, status):
+    def failing_answer(question):
         raise LLMError(kind, "Safe message for the customer.")
 
-    monkeypatch.setattr(chat_module, "ask", failing_ask)
+    monkeypatch.setattr(chat_module, "answer_question", failing_answer)
     response = client.post("/chat", json={"question": "Hello"})
 
     assert response.status_code == status

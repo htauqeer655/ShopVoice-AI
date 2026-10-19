@@ -24,15 +24,7 @@ class LLMError(Exception):
         self.user_message = user_message
 
 
-def _make_client() -> OpenAI:
-    return OpenAI(
-        api_key=settings.openai_api_key.get_secret_value(),
-        timeout=settings.openai_timeout_seconds,
-        max_retries=settings.openai_max_retries,
-    )
-
-
-def ask(question: str) -> str:
+def validate_question(question: str) -> str:
     question = (question or "").strip()
     if not question:
         raise LLMError("invalid_input", "Please type a question.")
@@ -41,6 +33,19 @@ def ask(question: str) -> str:
             "invalid_input",
             f"Question is too long (maximum {settings.max_question_chars} characters).",
         )
+    return question
+
+
+def _make_client() -> OpenAI:
+    return OpenAI(
+        api_key=settings.openai_api_key.get_secret_value(),
+        timeout=settings.openai_timeout_seconds,
+        max_retries=settings.openai_max_retries,
+    )
+
+
+def complete(system_prompt: str, user_content: str) -> str:
+    """One chat call with safe error handling. Never logs prompts or answers."""
     if settings.openai_api_key is None:
         raise LLMError("not_configured", "The assistant is not configured yet.")
 
@@ -50,8 +55,8 @@ def ask(question: str) -> str:
         response = client.chat.completions.create(
             model=settings.openai_model,
             messages=[
-                {"role": "system", "content": build_system_prompt(settings.business_name)},
-                {"role": "user", "content": question},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
             ],
             max_completion_tokens=300,
         )
@@ -81,3 +86,9 @@ def ask(question: str) -> str:
     if not answer:
         raise LLMError("empty_response", "The assistant had no answer. Please try again.")
     return answer
+
+
+def ask(question: str) -> str:
+    """Plain assistant without the knowledge base (kept for reuse and tests)."""
+    question = validate_question(question)
+    return complete(build_system_prompt(settings.business_name), question)
